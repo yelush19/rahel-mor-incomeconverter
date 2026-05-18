@@ -1,7 +1,28 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(
+# תיקון openpyxl לקבצי Excel חדשים (borderID)
+try:
+    from openpyxl.styles.stylesheet import Stylesheet
+    from openpyxl.descriptors.serialisable import Serialisable
+    _orig = Serialisable.__class_getitem__ if hasattr(Serialisable, '__class_getitem__') else None
+except Exception:
+    pass
+
+try:
+    import openpyxl.styles.cell_style as _cs
+    _OrigCellStyle = _cs.CellStyle
+    class _PatchedCellStyle(_OrigCellStyle):
+        def __init__(self, **kwargs):
+            kwargs.pop('borderID', None)
+            kwargs.pop('pivotButton', None)
+            kwargs.pop('quotePrefix', None)
+            super().__init__(**kwargs)
+    _cs.CellStyle = _PatchedCellStyle
+except Exception:
+    pass
+
+
     page_title="ממיר הכנסות | רחל מור",
     page_icon="📊",
     layout="wide",
@@ -130,11 +151,7 @@ if page == "עיבוד":
         dfs = []
         for uploaded in uploaded_files:
             uploaded.seek(0)
-            try:
-                df = pd.read_excel(uploaded, header=None)
-            except Exception:
-                uploaded.seek(0)
-                df = pd.read_excel(uploaded, header=None, engine='calamine')
+            df = pd.read_excel(uploaded, header=None)
             dfs.append((uploaded.name, df))
 
         for name, df in dfs:
@@ -218,15 +235,7 @@ elif page == "הגדרות":
         idx_file = st.file_uploader("CLients_Index_Rachel.xlsx", type=["xlsx"], key="idx")
         if idx_file:
             if st.button("📥 ייבא לקוחות"):
-                try:
-                    df_idx = pd.read_excel(idx_file, header=None)
-                except Exception:
-                    idx_file.seek(0)
-                    try:
-                        df_idx = pd.read_excel(idx_file, header=None, engine='calamine')
-                    except Exception:
-                        idx_file.seek(0)
-                        df_idx = pd.read_excel(idx_file, header=None, engine='xlrd')
+                df_idx = pd.read_excel(idx_file, header=None)
                 count, err = import_clients_from_df(df_idx)
                 if err and count == 0:
                     st.error(err)

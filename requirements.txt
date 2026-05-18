@@ -1,1 +1,5 @@
-  s t r e a m l i t > = 1 . 3 2 . 0   p a n d a s > = 2 . 0 . 0   o p e n p y x l > = 3 . 1 . 0   x l r d > = 2 . 0 . 1   s u p a b a s e > = 2 . 3 . 0   p y t h o n - c a l a m i n e > = 0 . 1 . 7   
+streamlit>=1.32.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+xlrd>=2.0.1
+supabase>=2.3.0
