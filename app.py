@@ -22,8 +22,8 @@ html, body, .stApp {
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
     background: #ffffff !important;
-    border-left: 3px solid #27ae60 !important;
-    box-shadow: 2px 0 8px rgba(0,0,0,0.06) !important;
+    border-right: 3px solid #27ae60 !important;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.06) !important;
     direction: rtl !important;
 }
 section[data-testid="stSidebar"] * { color: #2c3e50 !important; }
@@ -51,8 +51,12 @@ h1 {
 h2, h3 { color: #2c3e50 !important; font-weight: 600 !important; }
 h4      { color: #555 !important; }
 
-/* ── All text alignment ── */
-p, div, label, span, li, td, th, input, textarea {
+/* ── All text alignment — scoped, not global ── */
+.main p, .main div, .main label, .main span, .main li,
+.main td, .main th, .main input, .main textarea,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] span {
     direction: rtl !important;
     text-align: right !important;
     font-family: 'Heebo', 'Segoe UI', sans-serif !important;
