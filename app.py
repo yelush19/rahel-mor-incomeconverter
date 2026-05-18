@@ -23,6 +23,7 @@ except Exception:
     pass
 
 
+st.set_page_config(
     page_title="ממיר הכנסות | רחל מור",
     page_icon="📊",
     layout="wide",
