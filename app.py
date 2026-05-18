@@ -126,8 +126,18 @@ if page == "עיבוד":
         extra_cols   = get_account_columns()
         all_unmatched, all_unknown_cols = [], []
 
+        # קרא את כל הקבצים פעם אחת ושמור
+        dfs = []
         for uploaded in uploaded_files:
-            df = pd.read_excel(uploaded, header=None)
+            uploaded.seek(0)
+            try:
+                df = pd.read_excel(uploaded, header=None)
+            except Exception:
+                uploaded.seek(0)
+                df = pd.read_excel(uploaded, header=None, engine='calamine')
+            dfs.append((uploaded.name, df))
+
+        for name, df in dfs:
             _, _, _, unmatched, unknown_cols = convert_income_file(df, clients_dict, extra_cols)
             for c in unmatched:
                 if c not in all_unmatched: all_unmatched.append(c)
@@ -163,12 +173,10 @@ if page == "עיבוד":
             extra_cols   = get_account_columns()
             clients_full = get_clients_full()
             clients_id   = {r["name"]: r.get("id_number", "") for r in clients_full}
-
             all_allocation = []
 
-            for uploaded in uploaded_files:
-                df          = pd.read_excel(uploaded, header=None)
-                month_label = detect_month_label(uploaded.name, df)
+            for fname, df in dfs:
+                month_label = detect_month_label(fname, df)
                 invoice_rows, receipt_rows, allocation_rows, _, _ = convert_income_file(
                     df, clients_dict, extra_cols, clients_id
                 )
@@ -213,9 +221,11 @@ elif page == "הגדרות":
                 try:
                     df_idx = pd.read_excel(idx_file, header=None)
                 except Exception:
+                    idx_file.seek(0)
                     try:
                         df_idx = pd.read_excel(idx_file, header=None, engine='calamine')
                     except Exception:
+                        idx_file.seek(0)
                         df_idx = pd.read_excel(idx_file, header=None, engine='xlrd')
                 count, err = import_clients_from_df(df_idx)
                 if err and count == 0:
