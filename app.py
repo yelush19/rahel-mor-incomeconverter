@@ -170,53 +170,82 @@ from utils.db import (
 )
 from utils.converter import convert_income_file, create_excel_output, detect_month_label
 
-# ── Navigation ──────────────────────────────────────────────
-page = st.sidebar.radio("ניווט", ["📊 עיבוד חודשי", "⚙️ הגדרות"])
+# ── Sidebar ──────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("""
+    <div style='text-align:center; padding: 20px 0 10px 0;'>
+        <div style='font-size:2rem;'>📊</div>
+        <div style='font-size:1.1rem; font-weight:700; color:#1a2b3c;'>ממיר הכנסות</div>
+        <div style='font-size:0.8rem; color:#888; margin-top:2px;'>רחל מור, עו"ד</div>
+    </div>
+    <hr style='border-color:#e0e7ef; margin:10px 0 20px 0;'>
+    """, unsafe_allow_html=True)
+
+    if "page" not in st.session_state:
+        st.session_state.page = "עיבוד"
+
+    btn_style_active   = "background:#27ae60;color:white;border:none;border-radius:8px;padding:12px 20px;width:100%;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:8px;font-family:'Heebo',sans-serif;"
+    btn_style_inactive = "background:#f4f6f8;color:#2c3e50;border:1px solid #e0e7ef;border-radius:8px;padding:12px 20px;width:100%;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:8px;font-family:'Heebo',sans-serif;"
+
+    if st.button("📊  עיבוד חודשי", use_container_width=True,
+                 type="primary" if st.session_state.page == "עיבוד" else "secondary"):
+        st.session_state.page = "עיבוד"
+        st.rerun()
+
+    if st.button("⚙️  הגדרות", use_container_width=True,
+                 type="primary" if st.session_state.page == "הגדרות" else "secondary"):
+        st.session_state.page = "הגדרות"
+        st.rerun()
+
+page = st.session_state.page
 
 # ════════════════════════════════════════════════════════════
 #  PAGE 1 — Monthly Processing
 # ════════════════════════════════════════════════════════════
-if page == "📊 עיבוד חודשי":
+if page == "עיבוד":
     st.title("📊 ממיר הכנסות → חשבשבת")
 
-    uploaded = st.file_uploader(
-        "העלי קובץ הכנסות חודשי (.xlsx)",
+    uploaded_files = st.file_uploader(
+        "העלי קובץ הכנסות חודשי (.xlsx) — אפשר כמה קבצים יחד",
         type=["xlsx"],
+        accept_multiple_files=True,
         help="לדוגמה: רחל_מור_הכנסות_3_2026.xlsx",
     )
 
-    if not uploaded:
-        st.info("⬆️ העלי קובץ כדי להתחיל")
+    if not uploaded_files:
+        st.info("⬆️ העלי קובץ אחד או יותר כדי להתחיל")
         st.stop()
 
-    df = pd.read_excel(uploaded, header=None)
-    month_label = detect_month_label(uploaded.name, df)
-
-    st.success(f"✅ נטען: **{uploaded.name}** | חודש: **{month_label}**")
-
-    with st.expander("👁️ תצוגה מקדימה"):
-        try:
-            preview = df.copy()
-            preview.columns = df.iloc[0].tolist()
-            st.dataframe(preview.iloc[1:].reset_index(drop=True), use_container_width=True)
-        except Exception:
-            st.dataframe(df, use_container_width=True)
+    for uploaded in uploaded_files:
+        st.divider()
+        df = pd.read_excel(uploaded, header=None)
+        month_label = detect_month_label(uploaded.name, df)
+        st.success(f"✅ **{uploaded.name}** | חודש: **{month_label}**")
 
     st.divider()
 
-    if st.button("🚀 עבד והכן קובץ ייבוא", type="primary", use_container_width=True):
-        with st.spinner("מעבד..."):
-            clients_dict = get_all_clients()
-            extra_cols   = get_account_columns()
+    if st.button("🚀 עבד והכן קבצי ייבוא", type="primary", use_container_width=True):
+        clients_dict = get_all_clients()
+        extra_cols   = get_account_columns()
 
-            invoice_rows, receipt_rows, unmatched, unknown_cols = convert_income_file(
-                df, clients_dict, extra_cols
-            )
+        all_unmatched    = []
+        all_unknown_cols = []
+
+        # First pass — collect all issues across all files
+        for uploaded in uploaded_files:
+            df = pd.read_excel(uploaded, header=None)
+            _, _, unmatched, unknown_cols = convert_income_file(df, clients_dict, extra_cols)
+            for c in unmatched:
+                if c not in all_unmatched:
+                    all_unmatched.append(c)
+            for c in unknown_cols:
+                if c not in all_unknown_cols:
+                    all_unknown_cols.append(c)
 
         # ── Handle unknown columns ──────────────────────────
-        if unknown_cols:
+        if all_unknown_cols:
             st.error("⚠️ עמודות לא מוכרות — הגדירי חשבון לכל אחת")
-            for col_name in unknown_cols:
+            for col_name in all_unknown_cols:
                 with st.form(f"col_form_{col_name}"):
                     st.markdown(f"#### עמודה: `{col_name}`")
                     c1, c2 = st.columns([2, 1])
@@ -228,10 +257,10 @@ if page == "📊 עיבוד חודשי":
                         st.rerun()
 
         # ── Handle unmatched clients ────────────────────────
-        if unmatched:
-            st.error(f"⚠️ {len(unmatched)} לקוחות לא נמצאו באינדקס")
+        if all_unmatched:
+            st.error(f"⚠️ {len(all_unmatched)} לקוחות לא נמצאו באינדקס")
             next_acct = get_next_account_number()
-            for i, client_name in enumerate(unmatched):
+            for i, client_name in enumerate(all_unmatched):
                 with st.form(f"client_form_{client_name}"):
                     st.markdown(f"**{client_name}**")
                     acct = st.number_input(
@@ -241,34 +270,43 @@ if page == "📊 עיבוד חודשי":
                     )
                     if st.form_submit_button("💾 שמור"):
                         add_client(client_name, int(acct))
-                        st.success(f"נשמר! לחצי שוב על 'עבד'")
+                        st.success("נשמר! לחצי שוב על 'עבד'")
                         st.rerun()
 
-        # ── All good — show download ─────────────────────────
-        if not unmatched and not unknown_cols:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("שורות חשבוניות", len(invoice_rows))
-            c2.metric("שורות קבלות",    len(receipt_rows))
-            c3.metric('סה"כ שורות',     len(invoice_rows) + len(receipt_rows))
+        # ── All good — generate one file per month ───────────
+        if not all_unmatched and not all_unknown_cols:
+            clients_dict = get_all_clients()
+            extra_cols   = get_account_columns()
 
-            excel_data  = create_excel_output(invoice_rows, receipt_rows, month_label)
-            output_name = f"Hashavshevet_{month_label.replace('.', '_')}.xlsx"
+            for uploaded in uploaded_files:
+                df          = pd.read_excel(uploaded, header=None)
+                month_label = detect_month_label(uploaded.name, df)
 
-            st.success("✅ הקובץ מוכן!")
-            st.download_button(
-                label=f"⬇️ הורד קובץ ייבוא — {month_label}",
-                data=excel_data,
-                file_name=output_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                type="primary",
-            )
+                invoice_rows, receipt_rows, _, _ = convert_income_file(df, clients_dict, extra_cols)
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric(f"חשבוניות — {month_label}", len(invoice_rows))
+                c2.metric(f"קבלות — {month_label}",    len(receipt_rows))
+                c3.metric('סה"כ',                       len(invoice_rows) + len(receipt_rows))
+
+                excel_data  = create_excel_output(invoice_rows, receipt_rows, month_label)
+                output_name = f"Hashavshevet_{month_label.replace('.', '_')}.xlsx"
+
+                st.download_button(
+                    label=f"⬇️ הורד — {month_label}",
+                    data=excel_data,
+                    file_name=output_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    type="primary",
+                    key=f"dl_{month_label}",
+                )
 
 
 # ════════════════════════════════════════════════════════════
 #  PAGE 2 — Settings
 # ════════════════════════════════════════════════════════════
-elif page == "⚙️ הגדרות":
+elif page == "הגדרות":
     st.title("⚙️ הגדרות")
     tab1, tab2 = st.tabs(["👥 לקוחות", "🔢 חשבונות / עמודות"])
 
