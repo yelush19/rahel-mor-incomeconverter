@@ -68,7 +68,7 @@ from utils.db import (
     get_all_clients, get_clients_full, add_client, delete_client, get_next_account_number,
     import_clients_from_df, get_account_columns, add_account_column,
 )
-from utils.converter import convert_income_file, create_excel_output, detect_month_label
+from utils.converter import convert_income_file, create_excel_output, create_allocation_report, detect_month_label
 
 with st.sidebar:
     st.markdown("""
@@ -128,7 +128,7 @@ if page == "עיבוד":
 
         for uploaded in uploaded_files:
             df = pd.read_excel(uploaded, header=None)
-            _, _, unmatched, unknown_cols = convert_income_file(df, clients_dict, extra_cols)
+            _, _, _, unmatched, unknown_cols = convert_income_file(df, clients_dict, extra_cols)
             for c in unmatched:
                 if c not in all_unmatched: all_unmatched.append(c)
             for c in unknown_cols:
@@ -161,15 +161,25 @@ if page == "עיבוד":
         if not all_unmatched and not all_unknown_cols:
             clients_dict = get_all_clients()
             extra_cols   = get_account_columns()
+            clients_full = get_clients_full()
+            clients_id   = {r["name"]: r.get("id_number", "") for r in clients_full}
+
+            all_allocation = []
+
             for uploaded in uploaded_files:
                 df          = pd.read_excel(uploaded, header=None)
                 month_label = detect_month_label(uploaded.name, df)
-                invoice_rows, receipt_rows, _, _ = convert_income_file(df, clients_dict, extra_cols)
+                invoice_rows, receipt_rows, allocation_rows, _, _ = convert_income_file(
+                    df, clients_dict, extra_cols, clients_id
+                )
+                all_allocation.extend(allocation_rows)
+
                 st.divider()
                 c1, c2, c3 = st.columns(3)
                 c1.metric("חשבוניות", len(invoice_rows))
                 c2.metric("קבלות",    len(receipt_rows))
                 c3.metric("חודש",     month_label)
+
                 excel_data = create_excel_output(invoice_rows, receipt_rows, month_label)
                 st.download_button(
                     label=f"⬇️ הורד ייבוא — {month_label}",
@@ -177,6 +187,18 @@ if page == "עיבוד":
                     file_name=f"Hashavshevet_{month_label.replace('.', '_')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True, type="primary", key=f"dl_{month_label}",
+                )
+
+            if all_allocation:
+                st.divider()
+                st.warning(f"⚠️ נמצאו **{len(all_allocation)}** חשבוניות הדורשות מספר הקצאה")
+                alloc_data = create_allocation_report(all_allocation)
+                st.download_button(
+                    label="📋 הורד דוח הקצאה למילוי",
+                    data=alloc_data,
+                    file_name="דוח_הקצאה.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True, key="dl_allocation",
                 )
 
 elif page == "הגדרות":
@@ -188,7 +210,14 @@ elif page == "הגדרות":
         idx_file = st.file_uploader("CLients_Index_Rachel.xlsx", type=["xlsx"], key="idx")
         if idx_file:
             if st.button("📥 ייבא לקוחות"):
-                count, err = import_clients_from_df(pd.read_excel(idx_file, header=None))
+                try:
+                    df_idx = pd.read_excel(idx_file, header=None)
+                except Exception:
+                    try:
+                        df_idx = pd.read_excel(idx_file, header=None, engine='calamine')
+                    except Exception:
+                        df_idx = pd.read_excel(idx_file, header=None, engine='xlrd')
+                count, err = import_clients_from_df(df_idx)
                 if err and count == 0:
                     st.error(err)
                 elif err:

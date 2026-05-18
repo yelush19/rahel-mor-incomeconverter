@@ -48,10 +48,11 @@ def import_clients_from_df(df: pd.DataFrame) -> tuple:
     """Returns (count, error_message)"""
     sb = get_supabase()
 
+    # מצא שורת כותרת — מכילה 'חשבון' או 'מפתח'
     header_row = None
     for i in range(min(10, len(df))):
         row_vals = [str(v) for v in df.iloc[i].tolist()]
-        if any('חשבון' in v for v in row_vals):
+        if any(k in v for v in row_vals for k in ['חשבון', 'מפתח']):
             header_row = i
             break
 
@@ -63,13 +64,66 @@ def import_clients_from_df(df: pd.DataFrame) -> tuple:
                     if kw in h:
                         return j
             return None
-        col_account = find_col(['חשבון'])
-        col_name    = find_col(['שם חשבון', 'שם'])
+        col_account = find_col(['מפתח חשבון', 'חשבון'])
+        col_name    = find_col(['שם החשבון', 'שם חשבון', 'שם'])
         col_id      = find_col(['מס.ע.מ', 'ע.מ', 'ת.ז'])
         data_start  = header_row + 1
     else:
-        col_account, col_name, col_id = 2, 3, None
-        data_start = 0
+        col_account, col_name, col_id = 5, 6, 10
+        data_start = 3
+
+    clients = []
+    for i in range(data_start, len(df)):
+        row = df.iloc[i]
+        try:
+            account = row.iloc[col_account] if col_account is not None else None
+            name    = row.iloc[col_name]    if col_name    is not None else None
+            id_num  = row.iloc[col_id]      if col_id      is not None else None
+        except Exception:
+            continue
+
+        if pd.isna(account) or pd.isna(name):
+            continue
+
+        account_str = str(account).replace(".0", "").strip()
+        if not (account_str.isdigit() and len(account_str) == 4
+                and account_str.startswith("3") and account_str != "3999"):
+            continue
+
+        name_str = str(name).strip()
+        if not name_str or name_str.isdigit() or len(name_str) < 2:
+            continue
+
+        id_str = ""
+        if id_num is not None and not pd.isna(id_num):
+            id_str = str(id_num).replace(".0", "").strip()
+            if id_str in ("0", "nan", "None", ""):
+                id_str = ""
+
+        try:
+            clients.append({
+                "name":           name_str,
+                "account_number": int(float(account)),
+                "id_number":      id_str,
+            })
+        except Exception:
+            pass
+
+    if not clients:
+        return 0, "לא נמצאו לקוחות — בדקי שהקובץ הוא אינדקס חשבונות מחשבשבת"
+
+    try:
+        sb.table("clients").delete().neq("account_number", 0).execute()
+        sb.table("clients").insert(clients).execute()
+        return len(clients), None
+    except Exception as e:
+        try:
+            clients_no_id = [{"name": c["name"], "account_number": c["account_number"]} for c in clients]
+            sb.table("clients").delete().neq("account_number", 0).execute()
+            sb.table("clients").insert(clients_no_id).execute()
+            return len(clients_no_id), "⚠️ ת.ז לא נשמרה — הריצי: ALTER TABLE clients ADD COLUMN IF NOT EXISTS id_number TEXT DEFAULT '';"
+        except Exception as e2:
+            return 0, f"שגיאה: {str(e2)}"
 
     clients = []
     for i in range(data_start, len(df)):
