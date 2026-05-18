@@ -16,18 +16,18 @@ def get_all_clients() -> dict:
     return {row["name"]: row["account_number"] for row in result.data}
 
 
-def get_clients_with_id() -> dict:
-    """Returns {name: {account, id_number}}"""
+def get_clients_full() -> list:
+    """Returns list of {account_number, name, id_number}"""
     sb = get_supabase()
-    result = sb.table("clients").select("name, account_number, id_number").order("account_number").execute()
-    return {row["name"]: {"account": row["account_number"], "id_number": row.get("id_number") or ""} for row in result.data}
+    result = sb.table("clients").select("account_number, name, id_number").order("account_number").execute()
+    return result.data
 
 
 def add_client(name: str, account_number: int, id_number: str = ""):
     sb = get_supabase()
-    sb.table("clients").upsert(
-        {"name": name, "account_number": account_number, "id_number": id_number},
-        on_conflict="name"
+    sb.table("clients").delete().eq("account_number", account_number).execute()
+    sb.table("clients").insert(
+        {"name": name, "account_number": account_number, "id_number": id_number}
     ).execute()
 
 
@@ -45,14 +45,9 @@ def get_next_account_number() -> int:
 
 
 def import_clients_from_df(df: pd.DataFrame) -> int:
-    """
-    Import clients from מאזן בוחן.
-    Finds columns by header or by position.
-    Extracts: account_number, name, id_number (מס.ע.מ)
-    """
     sb = get_supabase()
 
-    # Find header row (the row that has 'חשבון' or 'שם חשבון')
+    # מצא שורת כותרת
     header_row = None
     for i in range(min(10, len(df))):
         row_vals = [str(v) for v in df.iloc[i].tolist()]
@@ -60,7 +55,6 @@ def import_clients_from_df(df: pd.DataFrame) -> int:
             header_row = i
             break
 
-    # Determine column indices
     if header_row is not None:
         headers = [str(v) for v in df.iloc[header_row].tolist()]
         def find_col(keywords):
@@ -69,19 +63,17 @@ def import_clients_from_df(df: pd.DataFrame) -> int:
                     if kw in h:
                         return j
             return None
-        col_account  = find_col(['חשבון'])
-        col_name     = find_col(['שם חשבון', 'שם'])
-        col_id       = find_col(['מס.ע.מ', 'ע.מ', 'ת.ז'])
-        data_start   = header_row + 1
+        col_account = find_col(['חשבון'])
+        col_name    = find_col(['שם חשבון', 'שם'])
+        col_id      = find_col(['מס.ע.מ', 'ע.מ', 'ת.ז'])
+        data_start  = header_row + 1
     else:
-        # Fallback: positional (col 2=account, col 3=name)
         col_account, col_name, col_id = 2, 3, None
         data_start = 0
 
     clients = []
     for i in range(data_start, len(df)):
         row = df.iloc[i]
-
         try:
             account = row.iloc[col_account] if col_account is not None else None
             name    = row.iloc[col_name]    if col_name    is not None else None
@@ -116,7 +108,8 @@ def import_clients_from_df(df: pd.DataFrame) -> int:
             pass
 
     if clients:
-        sb.table("clients").upsert(clients, on_conflict="name").execute()
+        sb.table("clients").delete().neq("account_number", 0).execute()
+        sb.table("clients").insert(clients).execute()
 
     return len(clients)
 
@@ -135,8 +128,9 @@ def get_account_columns() -> dict:
 
 def add_account_column(column_name: str, account_number: int, is_vat_exempt: bool):
     sb = get_supabase()
-    sb.table("account_columns").upsert({
+    sb.table("account_columns").delete().eq("column_name", column_name).execute()
+    sb.table("account_columns").insert({
         "column_name":    column_name,
         "account_number": account_number,
         "is_vat_exempt":  is_vat_exempt,
-    }, on_conflict="column_name").execute()
+    }).execute()

@@ -65,7 +65,7 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
 """, unsafe_allow_html=True)
 
 from utils.db import (
-    get_all_clients, add_client, delete_client, get_next_account_number,
+    get_all_clients, get_clients_full, add_client, delete_client, get_next_account_number,
     import_clients_from_df, get_account_columns, add_account_column,
 )
 from utils.converter import convert_income_file, create_excel_output, detect_month_label
@@ -194,24 +194,24 @@ elif page == "הגדרות":
         st.divider()
         st.subheader("הוסף לקוח חדש")
         with st.form("add_client"):
-            c1, c2 = st.columns([3, 1])
-            name = c1.text_input("שם לקוח")
-            acct = c2.number_input("חשבון", min_value=3000, max_value=3999,
-                                   step=1, value=get_next_account_number())
+            c1, c2, c3 = st.columns([3, 1, 2])
+            name   = c1.text_input("שם לקוח")
+            acct   = c2.number_input("חשבון", min_value=3000, max_value=3999,
+                                     step=1, value=get_next_account_number())
+            id_num = c3.text_input("ת.ז / מס.ע.מ")
             if st.form_submit_button("➕ הוסף"):
                 if name.strip():
-                    add_client(name.strip(), int(acct))
+                    add_client(name.strip(), int(acct), id_num.strip())
                     st.rerun()
         st.divider()
         st.subheader("רשימת לקוחות")
-        clients = get_all_clients()
-        if clients:
-            df_show = pd.DataFrame(
-                [(a, n) for n, a in sorted(clients.items(), key=lambda x: x[1])],
-                columns=["חשבון", "שם לקוח"]
-            )
+        rows = get_clients_full()
+        if rows:
+            df_show = pd.DataFrame(rows)[["account_number", "name", "id_number"]]
+            df_show.columns = ["חשבון", "שם לקוח", "ת.ז / מס.ע.מ"]
+            df_show["ת.ז / מס.ע.מ"] = df_show["ת.ז / מס.ע.מ"].fillna("").astype(str)
             st.dataframe(df_show, use_container_width=True, hide_index=True)
-            st.caption(f'סה"כ {len(clients)} לקוחות')
+            st.caption(f'סה"כ {len(rows)} לקוחות')
         else:
             st.info("אין לקוחות — ייבאי אינדקס למעלה")
 
