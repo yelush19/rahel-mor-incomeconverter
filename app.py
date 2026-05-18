@@ -9,38 +9,47 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap');
 
 /* ── Base ── */
 html, body, .stApp {
     direction: rtl !important;
     font-family: 'Heebo', 'Segoe UI', sans-serif !important;
-    background-color: #0f1117 !important;
-    color: #e0e0e0 !important;
+    background-color: #f4f6f8 !important;
+    color: #1a2b3c !important;
 }
 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
-    background: #161b22 !important;
-    border-left: 1px solid #2a9d5c !important;
+    background: #ffffff !important;
+    border-left: 3px solid #27ae60 !important;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.06) !important;
     direction: rtl !important;
 }
-section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
+section[data-testid="stSidebar"] * { color: #2c3e50 !important; }
 section[data-testid="stSidebar"] .stRadio label {
     font-size: 15px !important;
-    padding: 6px 0 !important;
+    font-weight: 500 !important;
 }
 
 /* ── Main content ── */
 .main .block-container {
     padding: 2rem 3rem !important;
     direction: rtl !important;
+    max-width: 1100px !important;
 }
 
 /* ── Headings ── */
-h1 { color: #2a9d5c !important; font-weight: 700 !important; font-size: 2rem !important; border-bottom: 2px solid #2a9d5c; padding-bottom: 8px; }
-h2, h3 { color: #3fb97a !important; font-weight: 600 !important; }
-h4 { color: #a8d5b5 !important; }
+h1 {
+    color: #1a2b3c !important;
+    font-weight: 700 !important;
+    font-size: 1.9rem !important;
+    border-bottom: 3px solid #27ae60 !important;
+    padding-bottom: 10px !important;
+    margin-bottom: 20px !important;
+}
+h2, h3 { color: #2c3e50 !important; font-weight: 600 !important; }
+h4      { color: #555 !important; }
 
 /* ── All text alignment ── */
 p, div, label, span, li, td, th, input, textarea {
@@ -51,91 +60,103 @@ p, div, label, span, li, td, th, input, textarea {
 
 /* ── File uploader ── */
 [data-testid="stFileUploader"] {
-    background: #161b22 !important;
-    border: 2px dashed #2a9d5c !important;
-    border-radius: 10px !important;
+    background: #ffffff !important;
+    border: 2px dashed #27ae60 !important;
+    border-radius: 12px !important;
     padding: 20px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
 }
-[data-testid="stFileUploader"] * { color: #c9d1d9 !important; }
 
-/* ── Buttons ── */
+/* ── Primary button ── */
 .stButton > button {
-    background: linear-gradient(135deg, #1a7a45, #2a9d5c) !important;
+    background: linear-gradient(135deg, #27ae60, #2ecc71) !important;
     color: white !important;
     border: none !important;
     border-radius: 8px !important;
     font-family: 'Heebo', sans-serif !important;
-    font-size: 16px !important;
+    font-size: 15px !important;
     font-weight: 600 !important;
-    padding: 10px 24px !important;
+    padding: 10px 28px !important;
+    box-shadow: 0 3px 10px rgba(39,174,96,0.25) !important;
     transition: all 0.2s ease !important;
 }
-.stButton > button:hover { background: linear-gradient(135deg, #2a9d5c, #3fb97a) !important; transform: translateY(-1px); }
+.stButton > button:hover {
+    background: linear-gradient(135deg, #219a55, #27ae60) !important;
+    box-shadow: 0 5px 15px rgba(39,174,96,0.35) !important;
+    transform: translateY(-1px) !important;
+}
 
 /* ── Download button ── */
 .stDownloadButton > button {
-    background: linear-gradient(135deg, #145a32, #1e8449) !important;
+    background: linear-gradient(135deg, #27ae60, #2ecc71) !important;
     color: white !important;
-    border: 2px solid #2a9d5c !important;
+    border: none !important;
     border-radius: 10px !important;
-    font-size: 18px !important;
+    font-size: 17px !important;
     font-weight: 700 !important;
     padding: 14px 28px !important;
     width: 100% !important;
-    letter-spacing: 0.5px !important;
+    box-shadow: 0 4px 15px rgba(39,174,96,0.3) !important;
+    letter-spacing: 0.3px !important;
 }
-.stDownloadButton > button:hover { background: linear-gradient(135deg, #1e8449, #2a9d5c) !important; box-shadow: 0 0 20px rgba(42,157,92,0.4) !important; }
+.stDownloadButton > button:hover {
+    box-shadow: 0 6px 20px rgba(39,174,96,0.45) !important;
+    transform: translateY(-1px) !important;
+}
 
 /* ── Metrics ── */
 [data-testid="stMetric"] {
-    background: #161b22 !important;
-    border: 1px solid #2a9d5c !important;
+    background: #ffffff !important;
+    border: 1px solid #e0e7ef !important;
+    border-top: 3px solid #27ae60 !important;
     border-radius: 10px !important;
     padding: 16px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
 }
-[data-testid="stMetricValue"] { color: #2a9d5c !important; font-size: 2rem !important; font-weight: 700 !important; }
-[data-testid="stMetricLabel"] { color: #8b949e !important; }
+[data-testid="stMetricValue"] { color: #27ae60 !important; font-size: 2rem !important; font-weight: 700 !important; }
+[data-testid="stMetricLabel"] { color: #7f8c8d !important; font-size: 13px !important; }
 
-/* ── Alerts ── */
-[data-testid="stAlert"] { direction: rtl !important; border-radius: 8px !important; }
-
-/* ── Dataframe ── */
-[data-testid="stDataFrame"] { border: 1px solid #30363d !important; border-radius: 8px !important; }
-
-/* ── Expander ── */
+/* ── Cards / Expander ── */
 [data-testid="stExpander"] {
-    background: #161b22 !important;
-    border: 1px solid #30363d !important;
-    border-radius: 8px !important;
+    background: #ffffff !important;
+    border: 1px solid #e0e7ef !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05) !important;
 }
 
 /* ── Divider ── */
-hr { border-color: #30363d !important; }
+hr { border-color: #e0e7ef !important; }
 
 /* ── Input fields ── */
 input, textarea, select {
-    background: #1c2128 !important;
-    border: 1px solid #30363d !important;
-    color: #e0e0e0 !important;
+    background: #ffffff !important;
+    border: 1px solid #d0d9e3 !important;
+    color: #1a2b3c !important;
     border-radius: 6px !important;
 }
 
 /* ── Tabs ── */
 [data-testid="stTabs"] button {
-    color: #8b949e !important;
+    color: #7f8c8d !important;
     font-family: 'Heebo', sans-serif !important;
     font-size: 15px !important;
+    font-weight: 500 !important;
 }
 [data-testid="stTabs"] button[aria-selected="true"] {
-    color: #2a9d5c !important;
-    border-bottom: 2px solid #2a9d5c !important;
+    color: #27ae60 !important;
+    border-bottom: 3px solid #27ae60 !important;
+    font-weight: 700 !important;
 }
 
-/* ── Info box ── */
-.stInfo { background: #1c2128 !important; border-left: 4px solid #2a9d5c !important; }
+/* ── Info / Success / Error ── */
+[data-testid="stAlert"] { direction: rtl !important; border-radius: 8px !important; }
 
-/* ── Success ── */
-.stSuccess { border-left: 4px solid #2a9d5c !important; }
+/* ── Dataframe ── */
+[data-testid="stDataFrame"] {
+    border: 1px solid #e0e7ef !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
