@@ -44,10 +44,10 @@ def get_next_account_number() -> int:
     return 3001
 
 
-def import_clients_from_df(df: pd.DataFrame) -> int:
+def import_clients_from_df(df: pd.DataFrame) -> tuple:
+    """Returns (count, error_message)"""
     sb = get_supabase()
 
-    # מצא שורת כותרת
     header_row = None
     for i in range(min(10, len(df))):
         row_vals = [str(v) for v in df.iloc[i].tolist()]
@@ -107,11 +107,22 @@ def import_clients_from_df(df: pd.DataFrame) -> int:
         except Exception:
             pass
 
-    if clients:
+    if not clients:
+        return 0, "לא נמצאו לקוחות בקובץ — בדקי שהקובץ הוא מאזן בוחן מחשבשבת"
+
+    try:
         sb.table("clients").delete().neq("account_number", 0).execute()
         sb.table("clients").insert(clients).execute()
-
-    return len(clients)
+        return len(clients), None
+    except Exception as e:
+        # נסה בלי id_number אם העמודה לא קיימת
+        try:
+            clients_no_id = [{"name": c["name"], "account_number": c["account_number"]} for c in clients]
+            sb.table("clients").delete().neq("account_number", 0).execute()
+            sb.table("clients").insert(clients_no_id).execute()
+            return len(clients_no_id), "⚠️ ת.ז לא נשמרה — הריצי ב-Supabase: ALTER TABLE clients ADD COLUMN IF NOT EXISTS id_number TEXT DEFAULT '';"
+        except Exception as e2:
+            return 0, f"שגיאה: {str(e2)}"
 
 
 def get_account_columns() -> dict:

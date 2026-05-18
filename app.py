@@ -188,9 +188,15 @@ elif page == "הגדרות":
         idx_file = st.file_uploader("CLients_Index_Rachel.xlsx", type=["xlsx"], key="idx")
         if idx_file:
             if st.button("📥 ייבא לקוחות"):
-                count = import_clients_from_df(pd.read_excel(idx_file, header=None))
-                st.success(f"יובאו {count} לקוחות ✅")
-                st.rerun()
+                count, err = import_clients_from_df(pd.read_excel(idx_file, header=None))
+                if err and count == 0:
+                    st.error(err)
+                elif err:
+                    st.warning(err)
+                    st.rerun()
+                else:
+                    st.success(f"יובאו {count} לקוחות ✅")
+                    st.rerun()
         st.divider()
         st.subheader("הוסף לקוח חדש")
         with st.form("add_client"):
