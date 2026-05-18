@@ -165,7 +165,7 @@ input, textarea, select {
 """, unsafe_allow_html=True)
 
 from utils.db import (
-    get_all_clients, add_client, delete_client,
+    get_all_clients, add_client, delete_client, get_next_account_number,
     import_clients_from_df, get_account_columns, add_account_column,
 )
 from utils.converter import convert_income_file, create_excel_output, detect_month_label
@@ -230,12 +230,14 @@ if page == "📊 עיבוד חודשי":
         # ── Handle unmatched clients ────────────────────────
         if unmatched:
             st.error(f"⚠️ {len(unmatched)} לקוחות לא נמצאו באינדקס")
-            for client_name in unmatched:
+            next_acct = get_next_account_number()
+            for i, client_name in enumerate(unmatched):
                 with st.form(f"client_form_{client_name}"):
                     st.markdown(f"**{client_name}**")
                     acct = st.number_input(
                         "מספר חשבון (3000–3999)",
                         min_value=3000, max_value=3999, step=1,
+                        value=next_acct + i,
                     )
                     if st.form_submit_button("💾 שמור"):
                         add_client(client_name, int(acct))
