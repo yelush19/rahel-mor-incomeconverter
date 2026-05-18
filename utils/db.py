@@ -26,6 +26,14 @@ def delete_client(name: str):
     sb.table("clients").delete().eq("name", name).execute()
 
 
+def get_next_account_number() -> int:
+    sb = get_supabase()
+    result = sb.table("clients").select("account_number").order("account_number", desc=True).limit(1).execute()
+    if result.data:
+        return result.data[0]["account_number"] + 1
+    return 3001
+
+
 def import_clients_from_df(df: pd.DataFrame) -> int:
     """Import clients from מאזן בוחן Excel file."""
     sb = get_supabase()
