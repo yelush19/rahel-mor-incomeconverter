@@ -169,14 +169,20 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
             continue
 
         col_data = {}
-        if fee      > 0: col_data["שכט"]     = fee
-        if notary   > 0: col_data["נוטריון"] = notary
-        if expenses > 0: col_data["הוצאות"]  = expenses
-        if misc     > 0: col_data["שונות"]   = misc
+        if fee      != 0: col_data["שכט"]     = fee
+        if notary   != 0: col_data["נוטריון"] = notary
+        if expenses != 0: col_data["הוצאות"]  = expenses
+        if misc     != 0: col_data["שונות"]   = misc
 
         for un_name, un_j in (idx.get("_unsupported") or {}).items():
-            if un_j < len(row) and _clean(row.iloc[un_j]) > 0:
+            if un_j < len(row) and _clean(row.iloc[un_j]) != 0:
                 col_data[un_name] = _clean(row.iloc[un_j])
+
+        if not col_data and total != 0:
+            raise ValueError(
+                f"שורה {i + 1} ({client_name}, חשבונית {invoice_num}): סכום כולל {total} "
+                "אבל לא זוהה סכום באף עמודת הכנסה — השורה לא נקלטה. בדקי את הכותרות בקובץ."
+            )
 
         for col_name in col_data:
             if col_name not in KNOWN_COLUMNS and col_name not in extra_columns:
@@ -195,7 +201,7 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
         taxable_list = list(taxable_cols.items())
         for j, (col_name, col_value) in enumerate(taxable_list):
             is_last = (j == len(taxable_list) - 1)
-            if total_taxable > 0:
+            if total_taxable != 0:
                 if is_last:
                     col_vat = round(vat_file - accum_vat, 2)
                 else:
@@ -234,7 +240,7 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
             ])
 
         # ── קבלה ──
-        if total > 0:
+        if total != 0:
             receipt_rows.append([
                 txn_date_obj, 1200, account,
                 client_name, invoice_num,
