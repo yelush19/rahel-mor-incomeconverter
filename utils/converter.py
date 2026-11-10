@@ -19,6 +19,7 @@ KNOWN_COLUMNS = {
 INVOICE_HEADERS = [
     "תאריך", "חשבון חובה 1", "חשבון זכות 1", "חשבון זכות 2",
     "פרטים", "אסמכתא", "לקוח-סכום חובה 1", "הכנסה-סכום זכות 1", "מעמע-סכום זכות 2",
+    "מספר הקצאה",
 ]
 RECEIPT_HEADERS = [
     "תאריך", "חשבון חובה 1", "חשבון זכות",
@@ -39,6 +40,64 @@ def detect_month_label(filename: str, df: pd.DataFrame) -> str:
         if pd.notna(val) and hasattr(val, "month"):
             return f"{val.month:02d}.{val.year}"
     return "חדש"
+
+
+def _clean_text(val) -> str:
+    """טקסט נקי מתא: ריק / nan / 0 ⇒ ''; מספר שלם בלי '.0'."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return ""
+    t = str(val).strip()
+    if t.endswith(".0"):
+        t = t[:-2]
+    return "" if t.lower() in ("nan", "none", "0") else t
+
+
+def new_client_candidates(df: pd.DataFrame, names) -> list:
+    """לכל שם לקוח חדש: (שם, ת.ז מהקובץ). חסרה ת.ז ⇒ ValueError — ⛔ פותחים חשבון בלי ת.ז (לנה 10/11/2026)."""
+    idx, _ = resolve_layout(df)
+    out, missing = [], []
+    for name in names:
+        tid = ""
+        for i in range(1, len(df)):
+            row = df.iloc[i]
+            if str(row.iloc[idx["client"]]).strip() == name:
+                tid = _clean_text(row.iloc[idx["file_id"]]) if "file_id" in idx else ""
+                if tid:
+                    break
+        if tid:
+            out.append((name, tid))
+        else:
+            missing.append(name)
+    if missing:
+        raise ValueError("ללקוחות חדשים אלה אין ת.ז בקובץ — לא נפתח חשבון: " + " · ".join(missing))
+    return out
+
+
+NEW_ACCOUNT_HEADERS = ["קוד מיון", "מפתח חשבון", "שם החשבון", "חתך", "חשבון ראשי", "קוד מאזן", "מס.ע.מ"]
+
+
+def create_new_accounts_excel(rows: list) -> io.BytesIO:
+    """אקסל פתיחת כרטיסי לקוח בחשבשבת, במבנה אינדקס החשבונות של הלקוחה
+    (קוד מיון 300 · מפתח חשבון · שם · חתך ^^^^^ · חשבון ראשי «לקוחות» · קוד מאזן «(ללא)» · מס.ע.מ).
+    rows: [(account_number, name, id_number)]"""
+    wb = Workbook(); ws = wb.active; ws.title = "פתיחת חשבונות"
+    ws.sheet_view.rightToLeft = True
+    ws.append(NEW_ACCOUNT_HEADERS)
+    for cell in ws[1]:
+        cell.fill, cell.font = HDR_FILL, HDR_FONT
+        cell.alignment = Alignment(horizontal="center")
+    for acct, name, tid in rows:
+        ws.append(["300", str(acct), name, "^^^^^", "לקוחות", "(ללא)", str(tid)])
+    for r in range(2, ws.max_row + 1):
+        for c in (1, 2, 7):
+            ws.cell(row=r, column=c).number_format = "@"
+    if rows:   # טווח מוגדר (כמו בכל קובץ ייבוא לחשבשבת): שם קבוע «Database», כולל כותרת
+        wb.defined_names["Database"] = DefinedName(
+            "Database", attr_text=f"'{ws.title}'!$A$1:$G${len(rows) + 1}")
+    for i, w in enumerate([10, 12, 34, 10, 14, 12, 14], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    return out
 
 
 def _clean(val) -> float:
@@ -72,6 +131,8 @@ _OPTIONAL_HEADERS = {
     "expenses": ("הוצאות",),
     "fee":      ("שכט", "שכ\"ט"),
     "misc":     ("שונות",),
+    "alloc_no": ("מספר הקצאה",),   # מספר הקצאה שכבר קיים בקובץ ⇒ אין צורך בדוח הקצאה (לנה 10/11/2026)
+    "file_id":  ("מספק עסק",),     # ת.ז / ח.פ של הלקוח בקובץ
 }
 # עמודות שהממיר עדיין לא יודע לקלוט — ⛔ מנחשים להן חשבון; אם יש בהן סכום, השורה מדווחת כ«עמודה לא מוכרת»
 _NOT_SUPPORTED_HEADERS = ("הוצאות פטורות", "פקדון")
@@ -168,6 +229,8 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
                 unmatched.append(client_name)
             continue
 
+        alloc_in_file = _clean_text(_cell(row, "alloc_no"))
+
         col_data = {}
         if fee      != 0: col_data["שכט"]     = fee
         if notary   != 0: col_data["נוטריון"] = notary
@@ -222,7 +285,7 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
             invoice_rows.append([
                 txn_date_obj, account, credit_account, 9001,
                 client_name, invoice_num,
-                row_total, row_income, col_vat,
+                row_total, row_income, col_vat, alloc_in_file,
             ])
 
         # עמודות פטורות ממע"מ
@@ -236,7 +299,7 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
             invoice_rows.append([
                 txn_date_obj, account, credit_account, 9001,
                 client_name, invoice_num,
-                round(col_value, 2), round(col_value, 2), 0.0,
+                round(col_value, 2), round(col_value, 2), 0.0, alloc_in_file,
             ])
 
         # ── קבלה ──
@@ -250,10 +313,12 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
         # ── דוח הקצאה ──
         net_taxable = fee + notary
         threshold   = _allocation_threshold(txn_date_obj)
-        if net_taxable >= threshold:
+        if net_taxable >= threshold and not alloc_in_file:
             id_number = (clients_id or {}).get(client_name, "")
             if not id_number and matched_name:
                 id_number = (clients_id or {}).get(matched_name, "")
+            if not id_number:
+                id_number = _clean_text(_cell(row, "file_id"))
             allocation_rows.append([
                 invoice_num, txn_date_obj, client_name,
                 id_number, net_taxable, "",  # מספר הקצאה ריק
@@ -268,12 +333,12 @@ HDR_FILL = PatternFill("solid", fgColor="1E4D2B")
 HDR_FONT = Font(bold=True, color="FFFFFF")
 
 # רוחבי עמודות קבועים
-INV_WIDTHS = [13, 15, 15, 15, 26, 10, 18, 18, 18]
+INV_WIDTHS = [13, 15, 15, 15, 26, 10, 18, 18, 18, 16]
 REC_WIDTHS = [13, 15, 15, 26, 10, 18, 18]
 ALC_WIDTHS = [12, 13, 26, 15, 18, 18]
 
 # עמודות שצריכות פורמט TEXT (אינדקס 1-based)
-INV_TEXT_COLS = {2, 3, 4, 6}   # חשבון חובה 1, זכות 1, זכות 2, אסמכתא
+INV_TEXT_COLS = {2, 3, 4, 6, 10}   # חשבון חובה 1, זכות 1, זכות 2, אסמכתא
 REC_TEXT_COLS = {2, 3, 5}      # חשבון חובה 1, זכות, אסמכתא
 
 
