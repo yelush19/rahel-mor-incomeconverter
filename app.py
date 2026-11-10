@@ -90,7 +90,8 @@ from utils.db import (
     get_all_clients, get_clients_full, add_client, delete_client, get_next_account_number,
     import_clients_from_df, get_account_columns, add_account_column,
 )
-from utils.converter import convert_income_file, create_excel_output, create_allocation_report, detect_month_label
+from utils.converter import (convert_income_file, create_excel_output, create_allocation_report,
+                             detect_month_label, new_client_candidates, create_new_accounts_excel)
 
 with st.sidebar:
     st.markdown("""
@@ -177,14 +178,31 @@ if page == "עיבוד":
         if all_unmatched:
             st.error(f"⚠️ {len(all_unmatched)} לקוחות לא נמצאו — הזיני מספר חשבון")
             next_acct = get_next_account_number()
+            # ת.ז מהקובץ (עמודת «מספק עסק»). חסרה ⇒ ⛔ לא פותחים חשבון (לנה 10/11/2026)
+            file_ids = {}
+            for _n, _df in dfs:
+                for _name in all_unmatched:
+                    try:
+                        file_ids.update(dict(new_client_candidates(_df, [_name])))
+                    except ValueError:
+                        pass
             for i, client_name in enumerate(all_unmatched):
                 with st.form(f"cl_{client_name}"):
                     st.markdown(f"**{client_name}**")
+                    tid = file_ids.get(client_name, "")
+                    if tid:
+                        st.caption(f"ת.ז / ח.פ מהקובץ: {tid}")
+                    else:
+                        st.error("אין ת.ז בקובץ ללקוח הזה — לא ניתן לפתוח חשבון עד שתוזן ת.ז")
+                    id_in = st.text_input("ת.ז / ח.פ", value=tid, key=f"id_{client_name}")
                     acct = st.number_input("מספר חשבון", min_value=3000, max_value=3999,
                                            step=1, value=next_acct + i)
                     if st.form_submit_button("💾 שמור"):
-                        add_client(client_name, int(acct))
-                        st.rerun()
+                        if not id_in.strip():
+                            st.error("חובה ת.ז / ח.פ")
+                        else:
+                            add_client(client_name, int(acct), id_in.strip())
+                            st.rerun()
 
         if not all_unmatched and not all_unknown_cols:
             clients_dict = get_all_clients()
