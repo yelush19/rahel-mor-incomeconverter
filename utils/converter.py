@@ -57,6 +57,66 @@ def _allocation_threshold(txn_date) -> float:
     return 5000.0 if d >= cutoff else 10000.0
 
 
+# ── זיהוי עמודות לפי כותרת (⛔ לא לפי מיקום) ──────────────────────
+# נוסף 10/11/2026: קובץ 10.2026 הוסיף עמודות («חשבונית», «חשבונית אל», «הערות», «הוצאות פטורות»),
+# והקריאה לפי מיקום החזירה 0 שורות בשקט. עכשיו הכותרות קובעות; חסרה עמודה חובה ⇒ שגיאה ברורה.
+_REQUIRED_HEADERS = {
+    "total":   ("סהכ כולל מעמ",),
+    "date":    ("תאריך",),
+    "vat":     ("מעמ",),
+    "client":  ("חשבונית אל", "שם לקוח", "לקוח"),
+    "invoice": ("חשבונית", "מספר חשבונית"),
+}
+_OPTIONAL_HEADERS = {
+    "notary":   ("נוטריון",),
+    "expenses": ("הוצאות",),
+    "fee":      ("שכט", "שכ\"ט"),
+    "misc":     ("שונות",),
+}
+# עמודות שהממיר עדיין לא יודע לקלוט — ⛔ מנחשים להן חשבון; אם יש בהן סכום, השורה מדווחת כ«עמודה לא מוכרת»
+_NOT_SUPPORTED_HEADERS = ("הוצאות פטורות", "פקדון")
+_LEGACY_POSITIONS = {"total": 0, "date": 1, "vat": 2, "notary": 4, "expenses": 5,
+                     "fee": 6, "misc": 7, "client": 9, "invoice": 10}
+
+
+def resolve_layout(df: pd.DataFrame):
+    """מחזיר (idx, source). source='headers' או 'legacy-position'. חסרה עמודה חובה בקובץ שיש בו כותרות ⇒ ValueError."""
+    if len(df) == 0:
+        return dict(_LEGACY_POSITIONS), "legacy-position"
+    heads = [str(h).strip() if not pd.isna(h) else "" for h in df.iloc[0].tolist()]
+    pos = {}
+    for i, h in enumerate(heads):
+        if h and h not in pos:
+            pos[h] = i
+    idx, missing = {}, []
+    for key, names in _REQUIRED_HEADERS.items():
+        hit = next((pos[n] for n in names if n in pos), None)
+        if hit is None:
+            missing.append(names[0])
+        else:
+            idx[key] = hit
+    # אם אף כותרת מוכרת לא נמצאה — קובץ בפריסה הישנה ללא כותרות מזוהות ⇒ מיקום (התנהגות קודמת)
+    if len(missing) == len(_REQUIRED_HEADERS):
+        return dict(_LEGACY_POSITIONS), "legacy-position"
+    if missing:
+        raise ValueError("בקובץ חסרות עמודות חובה: " + " · ".join(missing) +
+                         " — כותרות שנמצאו: " + " | ".join(h for h in heads if h))
+    for key, names in _OPTIONAL_HEADERS.items():
+        hit = next((pos[n] for n in names if n in pos), None)
+        if hit is not None:
+            idx[key] = hit
+    idx["_unsupported"] = {n: pos[n] for n in _NOT_SUPPORTED_HEADERS if n in pos}
+    return idx, "headers"
+
+
+def is_valid_client_name(name) -> bool:
+    """שם לקוח תקין = לפחות אות אחת (עברית/לטינית). ⛔ מספר בלבד / ריק / nan — סימן לעמודה שגויה בקובץ."""
+    t = str(name).strip()
+    if not t or t.lower() in ("nan", "none", "לקוח"):
+        return False
+    return any(ch.isalpha() for ch in t)
+
+
 def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dict,
                         clients_id: dict = None):
     """
@@ -71,23 +131,34 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
     unmatched       = []
     unknown_columns = set()
 
+    idx, layout_source = resolve_layout(df)
+
+    def _cell(row, key):
+        j = idx.get(key)
+        return row.iloc[j] if (j is not None and j < len(row)) else None
+
     for i in range(1, len(df)):
         row = df.iloc[i]
 
-        total       = _clean(row.iloc[0])
-        txn_date    = row.iloc[1]
-        vat_file    = _clean(row.iloc[2])   # מעמ מהקובץ
-        notary      = _clean(row.iloc[4]) if len(row) > 4 else 0
-        expenses    = _clean(row.iloc[5]) if len(row) > 5 else 0
-        fee         = _clean(row.iloc[6]) if len(row) > 6 else 0
-        misc        = _clean(row.iloc[7]) if len(row) > 7 else 0
-        client_name = str(row.iloc[9]).strip() if len(row) > 9 else ""
-        invoice_num = row.iloc[10] if len(row) > 10 else None
+        total       = _clean(_cell(row, "total"))
+        txn_date    = _cell(row, "date")
+        vat_file    = _clean(_cell(row, "vat"))   # מעמ מהקובץ
+        notary      = _clean(_cell(row, "notary"))
+        expenses    = _clean(_cell(row, "expenses"))
+        fee         = _clean(_cell(row, "fee"))
+        misc        = _clean(_cell(row, "misc"))
+        client_name = str(_cell(row, "client")).strip() if _cell(row, "client") is not None else ""
+        invoice_num = _cell(row, "invoice")
 
         if pd.isna(txn_date) or not hasattr(txn_date, "month"):
             continue
         if not client_name or client_name in ("nan", "לקוח", ""):
             continue
+        if not is_valid_client_name(client_name):
+            raise ValueError(
+                f"שם לקוח לא תקין בשורה {i + 1}: «{client_name}» — כנראה עמודת הלקוח "
+                "(«חשבונית אל») לא זוהתה בקובץ. לא נוצר חשבון ולא נכתב דבר."
+            )
 
         txn_date_obj = txn_date.date() if hasattr(txn_date, "date") else txn_date
 
@@ -102,6 +173,10 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
         if notary   > 0: col_data["נוטריון"] = notary
         if expenses > 0: col_data["הוצאות"]  = expenses
         if misc     > 0: col_data["שונות"]   = misc
+
+        for un_name, un_j in (idx.get("_unsupported") or {}).items():
+            if un_j < len(row) and _clean(row.iloc[un_j]) > 0:
+                col_data[un_name] = _clean(row.iloc[un_j])
 
         for col_name in col_data:
             if col_name not in KNOWN_COLUMNS and col_name not in extra_columns:

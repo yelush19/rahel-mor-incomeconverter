@@ -24,7 +24,14 @@ def get_clients_full() -> list:
 
 
 def add_client(name: str, account_number: int, id_number: str = ""):
+    from utils.converter import is_valid_client_name
+    if not is_valid_client_name(name):
+        raise ValueError(f"שם לקוח לא תקין: «{name}» — לא נפתח חשבון.")
     sb = get_supabase()
+    # ⛔ לא דורסים לקוח קיים: מספר החשבון כבר שייך ללקוח אחר ⇒ עצירה (קודם: מחיקה שקטה של הלקוח הקיים).
+    existing = sb.table("clients").select("name").eq("account_number", account_number).execute().data or []
+    if any(r.get("name") != name for r in existing):
+        raise ValueError(f"מספר חשבון {account_number} כבר שייך ללקוח «{existing[0].get('name')}» — לא נדרס.")
     sb.table("clients").delete().eq("account_number", account_number).execute()
     sb.table("clients").insert(
         {"name": name, "account_number": account_number, "id_number": id_number}
