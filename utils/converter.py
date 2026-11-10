@@ -19,6 +19,7 @@ KNOWN_COLUMNS = {
 INVOICE_HEADERS = [
     "תאריך", "חשבון חובה 1", "חשבון זכות 1", "חשבון זכות 2",
     "פרטים", "אסמכתא", "לקוח-סכום חובה 1", "הכנסה-סכום זכות 1", "מעמע-סכום זכות 2",
+    "מספר הקצאה",
 ]
 RECEIPT_HEADERS = [
     "תאריך", "חשבון חובה 1", "חשבון זכות",
@@ -90,6 +91,9 @@ def create_new_accounts_excel(rows: list) -> io.BytesIO:
     for r in range(2, ws.max_row + 1):
         for c in (1, 2, 7):
             ws.cell(row=r, column=c).number_format = "@"
+    if rows:   # טווח מוגדר (כמו בכל קובץ ייבוא לחשבשבת): שם קבוע «Database», כולל כותרת
+        wb.defined_names["Database"] = DefinedName(
+            "Database", attr_text=f"'{ws.title}'!$A$1:$G${len(rows) + 1}")
     for i, w in enumerate([10, 12, 34, 10, 14, 12, 14], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     out = io.BytesIO(); wb.save(out); out.seek(0)
@@ -225,6 +229,8 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
                 unmatched.append(client_name)
             continue
 
+        alloc_in_file = _clean_text(_cell(row, "alloc_no"))
+
         col_data = {}
         if fee      != 0: col_data["שכט"]     = fee
         if notary   != 0: col_data["נוטריון"] = notary
@@ -279,7 +285,7 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
             invoice_rows.append([
                 txn_date_obj, account, credit_account, 9001,
                 client_name, invoice_num,
-                row_total, row_income, col_vat,
+                row_total, row_income, col_vat, alloc_in_file,
             ])
 
         # עמודות פטורות ממע"מ
@@ -293,7 +299,7 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
             invoice_rows.append([
                 txn_date_obj, account, credit_account, 9001,
                 client_name, invoice_num,
-                round(col_value, 2), round(col_value, 2), 0.0,
+                round(col_value, 2), round(col_value, 2), 0.0, alloc_in_file,
             ])
 
         # ── קבלה ──
@@ -307,7 +313,6 @@ def convert_income_file(df: pd.DataFrame, clients_dict: dict, extra_columns: dic
         # ── דוח הקצאה ──
         net_taxable = fee + notary
         threshold   = _allocation_threshold(txn_date_obj)
-        alloc_in_file = _clean_text(_cell(row, "alloc_no"))
         if net_taxable >= threshold and not alloc_in_file:
             id_number = (clients_id or {}).get(client_name, "")
             if not id_number and matched_name:
@@ -328,12 +333,12 @@ HDR_FILL = PatternFill("solid", fgColor="1E4D2B")
 HDR_FONT = Font(bold=True, color="FFFFFF")
 
 # רוחבי עמודות קבועים
-INV_WIDTHS = [13, 15, 15, 15, 26, 10, 18, 18, 18]
+INV_WIDTHS = [13, 15, 15, 15, 26, 10, 18, 18, 18, 16]
 REC_WIDTHS = [13, 15, 15, 26, 10, 18, 18]
 ALC_WIDTHS = [12, 13, 26, 15, 18, 18]
 
 # עמודות שצריכות פורמט TEXT (אינדקס 1-based)
-INV_TEXT_COLS = {2, 3, 4, 6}   # חשבון חובה 1, זכות 1, זכות 2, אסמכתא
+INV_TEXT_COLS = {2, 3, 4, 6, 10}   # חשבון חובה 1, זכות 1, זכות 2, אסמכתא
 REC_TEXT_COLS = {2, 3, 5}      # חשבון חובה 1, זכות, אסמכתא
 
 
